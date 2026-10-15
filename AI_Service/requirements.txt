@@ -1,0 +1,5 @@
+# API and processing helpers. Python 3.11 recommended.
+fastapi>=0.115,<1
+uvicorn>=0.32,<1
+python-multipart>=0.0.20,<1
+Pillow>=10.4,<13
