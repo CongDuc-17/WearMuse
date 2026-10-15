@@ -1,0 +1,4 @@
+# Install AFTER requirements.txt. NVIDIA CUDA 12 + cuDNN 9 compatible setup.
+# Do not install onnxruntime (CPU) and onnxruntime-gpu in the same venv.
+rembg>=2.0.61,<3
+onnxruntime-gpu>=1.21,<1.27
