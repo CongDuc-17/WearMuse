@@ -9,6 +9,7 @@ No authentication. Bind to localhost.
 from __future__ import annotations
 
 import json
+import hashlib
 import uuid
 
 from pathlib import Path
@@ -18,6 +19,7 @@ from fastapi import (
     File,
     UploadFile,
     HTTPException,
+    Header,
 )
 
 from fastapi.responses import FileResponse
@@ -31,6 +33,7 @@ from .db import (
     create_item,
     get_item,
     requeue,
+    IdempotencyConflict,
 )
 
 from .images import (
@@ -212,6 +215,10 @@ def create_app(
     )
     async def upload_one(
         file: UploadFile = File(...),
+        idempotency_key: str | None = Header(
+            default=None, alias="Idempotency-Key", min_length=1, max_length=100,
+            pattern=r"^[A-Za-z0-9_-]+$",
+        ),
     ):
 
         max_bytes = (
@@ -266,11 +273,9 @@ def create_app(
             settings.data_dir / rel_path
         )
 
-        image_path.write_bytes(
-            image_bytes
-        )
-
+        item = None
         try:
+            image_path.write_bytes(image_bytes)
 
             item = create_item(
                 db_path,
@@ -285,15 +290,15 @@ def create_app(
 
                 width=width,
                 height=height,
+                idempotency_key=idempotency_key,
+                request_sha256=hashlib.sha256(data).hexdigest() if idempotency_key is not None else None,
             )
 
-        except Exception:
-
-            image_path.unlink(
-                missing_ok=True
-            )
-
-            raise
+        except IdempotencyConflict as exc:
+            raise HTTPException(409, "Upload key already belongs to another image") from exc
+        finally:
+            if item is None or item['original_path'] != rel_path:
+                image_path.unlink(missing_ok=True)
 
         return item_view(
             item,

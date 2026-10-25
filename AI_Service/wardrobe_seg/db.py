@@ -8,6 +8,10 @@ import sqlite3
 import uuid
 
 
+class IdempotencyConflict(ValueError):
+    """An upload key already belongs to a different image."""
+
+
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -53,6 +57,15 @@ def init_db(path: Path) -> None:
             );
             CREATE INDEX IF NOT EXISTS idx_items_queue ON items(status, created_at);
         """)
+        con.execute("BEGIN IMMEDIATE")
+        columns = {row['name'] for row in con.execute("PRAGMA table_info(items)")}
+        for column in ('idempotency_key', 'request_sha256'):
+            if column not in columns:
+                con.execute(f"ALTER TABLE items ADD COLUMN {column} TEXT")
+        con.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_items_idempotency_key
+            ON items(idempotency_key) WHERE idempotency_key IS NOT NULL
+        """)
 
 
 def get_item(db_path: Path, item_id: str) -> dict | None:
@@ -61,16 +74,27 @@ def get_item(db_path: Path, item_id: str) -> dict | None:
     return dict(row) if row else None
 
 
-def create_item(db_path: Path, *, original_filename: str, original_path: str, width: int, height: int) -> dict:
+def create_item(db_path: Path, *, original_filename: str, original_path: str, width: int, height: int,
+                idempotency_key: str | None = None, request_sha256: str | None = None) -> dict:
+    if idempotency_key is not None and request_sha256 is None:
+        raise ValueError("An upload key requires an image fingerprint")
     item_id = str(uuid.uuid4())
     now = utc_now()
     with connect(db_path) as con:
+        # Serialize lookup and insertion across API processes, including the first request for a key.
+        con.execute("BEGIN IMMEDIATE")
+        if idempotency_key is not None:
+            existing = con.execute("SELECT * FROM items WHERE idempotency_key=?", (idempotency_key,)).fetchone()
+            if existing is not None:
+                if existing['request_sha256'] != request_sha256:
+                    raise IdempotencyConflict("Upload key already belongs to another image")
+                return dict(existing)
         con.execute("""
             INSERT INTO items (id, status, original_filename, original_path, width, height,
-                               attempts, created_at, updated_at)
-            VALUES (?, 'queued', ?, ?, ?, ?, 0, ?, ?)
-        """, (item_id, original_filename, original_path, width, height, now, now))
-    return get_item(db_path, item_id)
+                               attempts, created_at, updated_at, idempotency_key, request_sha256)
+            VALUES (?, 'queued', ?, ?, ?, ?, 0, ?, ?, ?, ?)
+        """, (item_id, original_filename, original_path, width, height, now, now, idempotency_key, request_sha256))
+        return dict(con.execute("SELECT * FROM items WHERE id=?", (item_id,)).fetchone())
 
 
 def claim_one(db_path: Path) -> dict | None:

@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
+import { useThemeColor } from 'heroui-native';
 import { memo, useLayoutEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
-import { colors } from '@/constants/tokens';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import type { Garment } from '@/types/garment';
 
@@ -10,13 +10,15 @@ type Props = {
   thumbnail?: boolean;
   style?: StyleProp<ViewStyle>;
   onPreviewError?: () => void;
+  showOriginal?: boolean;
 };
 
-export const GarmentPreview = memo(function GarmentPreview({ garment, thumbnail, style, onPreviewError }: Props) {
+export const GarmentPreview = memo(function GarmentPreview({ garment, thumbnail, style, onPreviewError, showOriginal = false }: Props) {
+  const backgroundColor = useThemeColor('surface-secondary');
   const reducedMotion = useReducedMotion();
   const opacity = useRef(new Animated.Value(0)).current;
   const [failedUris, setFailedUris] = useState<readonly string[]>([]);
-  const cutout = garment.status === 'ready' ? garment.cutoutLocalUri : null;
+  const cutout = garment.status === 'ready' && !showOriginal ? garment.cutoutLocalUri : null;
   const preferred = thumbnail && garment.thumbnailLocalUri && !failedUris.includes(garment.thumbnailLocalUri)
     ? garment.thumbnailLocalUri : cutout;
   // A cutout is eligible only after the storage service has verified a durable local file.
@@ -38,7 +40,8 @@ export const GarmentPreview = memo(function GarmentPreview({ garment, thumbnail,
   };
 
   return (
-    <View style={[styles.container, style]} accessible={false}>
+    <View style={[{ backgroundColor, overflow: 'hidden' }, style]} accessible={!thumbnail} accessibilityRole={thumbnail ? undefined : 'image'}
+      accessibilityLabel={thumbnail ? undefined : `${candidate ? 'Ảnh tách nền' : 'Ảnh gốc'} của món đồ đã thêm ngày ${new Date(garment.createdAt).toLocaleDateString('vi-VN')}`}>
       <Image
         source={{ uri: garment.originalLocalUri }}
         style={StyleSheet.absoluteFill}
@@ -49,7 +52,7 @@ export const GarmentPreview = memo(function GarmentPreview({ garment, thumbnail,
         accessible={false}
       />
       {candidate && (
-        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.cutout, { opacity }]}>
+        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor, opacity }]}>
           <Image
             source={{ uri: candidate }}
             style={StyleSheet.absoluteFill}
@@ -73,9 +76,4 @@ export const GarmentPreview = memo(function GarmentPreview({ garment, thumbnail,
       )}
     </View>
   );
-});
-
-const styles = StyleSheet.create({
-  container: { backgroundColor: colors.surface, overflow: 'hidden' },
-  cutout: { backgroundColor: colors.surface },
 });

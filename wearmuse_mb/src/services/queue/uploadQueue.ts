@@ -66,7 +66,6 @@ export class UploadQueue {
         item = await api.upload(garment, job.signal);
       }
       // Persist a received server ID even if the app has just entered the background.
-      // A lost POST response cannot be recovered without backend idempotency support.
       if (!(await repository.update(garment.localId, { remoteId: item.id }))) return;
       await repository.update(garment.localId, {
         ...remotePatch(item, api, this.now()), retryRequested: false, nextAttemptAt: 0,
