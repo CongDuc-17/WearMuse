@@ -25,13 +25,15 @@ export function startSynchronization(): () => void {
     }));
     let disposed = false;
     let initialized = false;
+    let networkRevision = 0;
     let foreground = AppState.currentState === 'active';
     const applyForeground = () => engine.setForeground(initialized && foreground);
     const refreshNetwork = async () => {
+      const revision = ++networkRevision;
       try {
         const state = await Network.getNetworkStateAsync();
-        if (!disposed) engine.setConnected(state.isConnected === true);
-      } catch { if (!disposed) engine.setConnected(false); }
+        if (!disposed && revision === networkRevision) engine.setConnected(state.isConnected === true);
+      } catch { if (!disposed && revision === networkRevision) engine.setConnected(false); }
     };
     const appSubscription = AppState.addEventListener('change', (state) => {
       foreground = state === 'active';
@@ -39,6 +41,7 @@ export function startSynchronization(): () => void {
       if (foreground) void refreshNetwork();
     });
     const networkSubscription = Network.addNetworkStateListener((state) => {
+      networkRevision++;
       // The AI server can be reachable over local Wi-Fi without public Internet access.
       engine.setConnected(state.isConnected === true);
     });

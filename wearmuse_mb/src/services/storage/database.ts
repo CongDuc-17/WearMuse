@@ -156,10 +156,11 @@ export function createGarmentRepository(open: () => Promise<SQLite.SQLiteDatabas
       });
     },
 
+    // Live jobs are locked by the queue; interrupted writes must remain recoverable without a restart.
     async getUploadCandidates(now: number): Promise<Garment[]> {
       return (await (await db()).getAllAsync<GarmentRow>(`
         SELECT * FROM garments WHERE nextAttemptAt <= ? AND (
-          (remoteId IS NULL AND status IN ('local_saved', 'upload_queued'))
+          (remoteId IS NULL AND status IN ('local_saved', 'upload_queued', 'uploading'))
           OR (remoteId IS NOT NULL AND retryRequested = 1)
         ) ORDER BY createdAt ASC, localId ASC
       `, now)).map(fromRow);
@@ -169,7 +170,7 @@ export function createGarmentRepository(open: () => Promise<SQLite.SQLiteDatabas
       return (await (await db()).getAllAsync<GarmentRow>(`
         SELECT * FROM garments WHERE remoteId IS NOT NULL AND retryRequested = 0
           AND nextPollAt <= ? AND (
-            status IN ('queued', 'processing') OR (status = 'ready' AND cutoutLocalUri IS NULL)
+            status IN ('uploading', 'queued', 'processing') OR (status = 'ready' AND cutoutLocalUri IS NULL)
           ) ORDER BY nextPollAt ASC, createdAt ASC, localId ASC
       `, now)).map(fromRow);
     },

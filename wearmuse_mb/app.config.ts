@@ -10,8 +10,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     name: 'WearMuseMeow',
     slug: 'wearmusemeow',
     scheme: 'wearmusemeow',
-    userInterfaceStyle: 'light',
-    backgroundColor: '#F8F5F0',
+    userInterfaceStyle: 'automatic',
     ios: {
       ...config.ios,
       bundleIdentifier: 'com.wearmusemeow.mobile',
@@ -30,7 +29,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     },
     plugins: [
       'expo-router',
-      ['expo-splash-screen', { backgroundColor: '#F8F5F0', image: './assets/images/splash-icon.png', imageWidth: 76 }],
+      ['expo-splash-screen', { image: './assets/images/splash-icon.png', imageWidth: 76 }],
       ['expo-camera', {
         cameraPermission: 'Cho phép WearMuseMeow dùng máy ảnh để lưu trang phục vào tủ đồ của bạn.',
         recordAudioAndroid: false,

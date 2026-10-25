@@ -12,6 +12,8 @@ interface WardrobeSnapshot {
 const garments = new Map<string, Garment>();
 const itemListeners = new Map<string, Set<Listener>>();
 const listListeners = new Set<Listener>();
+const collectionListeners = new Set<Listener>();
+let collectionSnapshot: readonly Garment[] | null = null;
 let snapshot: WardrobeSnapshot = { ids: [], loading: true, error: null };
 let initialization: Promise<void> | null = null;
 let refreshes: Promise<void> = Promise.resolve();
@@ -27,7 +29,9 @@ function publishItem(id: string, garment: Garment | null) {
   const previous = garments.get(id);
   if (JSON.stringify(previous ?? null) === JSON.stringify(garment)) return;
   if (garment) garments.set(id, garment); else garments.delete(id);
+  collectionSnapshot = null;
   itemListeners.get(id)?.forEach((listener) => listener());
+  collectionListeners.forEach((listener) => listener());
 }
 
 function updateIds() {
@@ -94,6 +98,12 @@ export async function reloadWardrobe(): Promise<void> {
 }
 
 export const wardrobeStore = {
+  getCollection: (): readonly Garment[] => collectionSnapshot ??= [...garments.values()]
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.localId.localeCompare(a.localId)),
+  subscribeCollection(listener: Listener) {
+    collectionListeners.add(listener);
+    return () => { collectionListeners.delete(listener); };
+  },
   getSnapshot: () => snapshot,
   getGarment: (id: string) => garments.get(id) ?? null,
   subscribe(listener: Listener) {

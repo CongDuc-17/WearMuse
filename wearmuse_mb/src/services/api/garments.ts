@@ -68,14 +68,19 @@ export class GarmentsApi implements GarmentApi {
       phase = 'building_form';
       logDiagnostic('image_prepared', { localId: garment.localId, mimeType: prepared.mimeType });
       const form = new FormData();
-      // SDK 57's Expo fetch reads File.bytes(); legacy { uri, name, type } parts are unsupported.
+      // Expo fetch reads File.bytes(); legacy { uri, name, type } parts are unsupported.
       // The normalized upload.jpg supplies its native filename and image/jpeg MIME type.
       form.append('file', new File(prepared.originalLocalUri));
       phase = 'upload_request';
-      return parseRemoteGarment(await this.client.request('/v1/items', { method: 'POST', body: form }, signal, {
+      return parseRemoteGarment(await this.client.request('/v1/items', {
+        method: 'POST', body: form, headers: { 'Idempotency-Key': garment.localId },
+      }, signal, {
         localId: garment.localId, operation: 'upload',
       }));
     } catch (error) {
+      if (phase === 'upload_request' && !signal?.aborted && error instanceof ApiError && error.status === 409) {
+        error = new ApiError('Món đồ này đã được gửi với ảnh khác. Ảnh gốc vẫn được giữ trên thiết bị.', 'permanent', false, 409, error);
+      }
       if (phase === 'building_form' && !signal?.aborted && !(error instanceof ApiError)) {
         error = new ApiError('Ứng dụng chưa thể tạo dữ liệu gửi ảnh. Hãy tải lại ứng dụng rồi thử lại.', 'multipart', false, null, error);
       }
